@@ -1,12 +1,15 @@
 # frozen_string_literal: true
 
 require "redcarpet"
+require 'redcarpet/render_strip'
 require "nokogiri"
 require "rails_guides/markdown/renderer"
 require "rails-html-sanitizer"
 
 module RailsGuides
   class Markdown
+    attr_reader :title
+
     def initialize(view:, layout:, edge:, version:)
       @view          = view
       @layout        = layout
@@ -27,6 +30,10 @@ module RailsGuides
       generate_structure
       generate_index
       render_page
+    end
+
+    def plain_text_body
+      Redcarpet::Markdown.new(Redcarpet::Render::StripDown).render(@raw_body)
     end
 
     private
@@ -73,6 +80,13 @@ module RailsGuides
       def extract_raw_header_and_body
         if /^\-{40,}$/.match?(@raw_body)
           @raw_header, _, @raw_body = @raw_body.partition(/^\-{40,}$/).map(&:strip)
+        end
+      end
+
+      def self.extract_raw_header_and_body(content)
+        if /^\-{40,}$/.match?(content)
+          header, _, body = content.partition(/^\-{40,}$/).map(&:strip)
+          [header, body]
         end
       end
 

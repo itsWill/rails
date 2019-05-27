@@ -2,6 +2,8 @@
 
 require "set"
 require "fileutils"
+require "JSON"
+require "nokogiri"
 
 require "active_support/core_ext/string/output_safety"
 require "active_support/core_ext/object/blank"
@@ -25,6 +27,7 @@ module RailsGuides
       @kindle    = kindle
       @language  = language
       @direction = direction
+      @search_index = []
 
       if @kindle
         check_for_kindlegen
@@ -38,6 +41,7 @@ module RailsGuides
 
     def generate
       generate_guides
+      generate_search_index
       copy_assets
       generate_mobi if @kindle
     end
@@ -167,12 +171,22 @@ module RailsGuides
           result = view.render(layout: layout, formats: [$1.to_sym], file: $`)
         else
           body = File.read("#{@source_dir}/#{guide}")
-          result = RailsGuides::Markdown.new(
+          renderer = RailsGuides::Markdown.new(
             view:    view,
             layout:  layout,
             edge:    @edge,
             version: @version
-          ).render(body)
+          )
+          result = renderer.render(body)
+
+          puts "Adding guide to search index"
+          contents = renderer.plain_text_body
+          title = renderer.title.split("—").first
+          @search_index << {
+            path: File.basename(guide, '.md') + ".html",
+            title: title,
+            contents: prepare_contents(contents)
+          }
 
           warn_about_broken_links(result)
         end
@@ -180,6 +194,19 @@ module RailsGuides
         File.open(output_path, "w") do |f|
           f.write(result)
         end
+      end
+
+      def generate_search_index
+         puts "Writing JSON search index"
+         File.open("#{@output_dir}/search_index.json", "w") { |f| f.write(@search_index.to_json) }
+      end
+
+      def prepare_contents(contents)
+        contents.gsub!(/```(.|\n)*```/," ")
+        contents.gsub!(/`.*`/, " ")
+        contents.strip!
+        contents.squeeze!(" ")
+        CGI::escape_html(contents)
       end
 
       def warn_about_broken_links(html)
